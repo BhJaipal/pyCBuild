@@ -1,0 +1,6 @@
+bin/
+lib/
+*.exe
+build/
+*.a
+*.so

@@ -1,0 +1,15 @@
+{
+	"$schema": "./CBuild.schema.json",
+	"projectName": "CBuild",
+	"outputs": [
+		{
+			"outputName": "run",
+			"outputType": "shared_lib",
+			"src": ["test.cpp"],
+			"system_deps": {
+				"include": ["jsoncpp"],
+				"libs": ["jsoncpp"]
+			}
+		}
+	]
+}
