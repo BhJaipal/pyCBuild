@@ -10,7 +10,7 @@
 			"type": "array",
 			"items": {
 				"type": "object",
-				"required": ["outputName", "outputType", "src"],
+				"required": ["outputName", "outputType", "src", "language"],
 				"properties": {
 					"outputName": {
 						"description": "The name of the output",
@@ -19,6 +19,10 @@
 					"outputType": {
 						"type": "string",
 						"enum": ["executable", "shared_lib", "static_lib"]
+					},
+					"language": {
+						"type": "string",
+						"enum": ["c", "cpp"]
 					},
 					"src": {
 						"description": "Library source files",

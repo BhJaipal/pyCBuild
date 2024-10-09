@@ -42,6 +42,10 @@ def outputValidate(output: OutputT) -> None:
             raise KeyError("outputName must be in output")
         if "outputType" not in output:
             raise KeyError("outputType must be in output")
+        if "language" not in output:
+            raise KeyError("language must be in required in file output")
+        if (["c", "cpp"]).index(output["language"]) == -1:
+            raise KeyError("language must be c (C) or cpp (C++)")
         if type(output["outputName"]) != str:
             raise TypeError("outputName must be a string")
         if type(output["outputType"]) != str:
@@ -104,3 +108,45 @@ if len(sys.argv) == 2:
                 else:
                     os.system(f"touch lib/lib{outputName}.so")
                 os.system(f"gcc -shared -o lib/lib{outputName}.so {src}")
+            if output["outputType"] == "executable":
+                src = ""
+                for file in output["src"]:
+                    if not os.path.exists("build"):
+                        os.mkdir("build")
+                    src += f" build/{file.split('.')[0]}.o"
+                    os.system(
+                        f"gcc -c {file} -Wall -Werror -fpic -o build/{file.split('.')[0]}.o"
+                    )
+                outputName = output["outputName"]
+                libs = "$(pkg-config --libs"
+                includes = "$(pkg-config --cflags"
+                if "system_deps" in output:
+                    if (
+                        "include" in output["system_deps"]
+                        and len(output["system_deps"]["include"]) != 0
+                    ):
+                        for inc in output["system_deps"]["include"]:
+                            includes += f" {inc}"
+                        includes += ")"
+                    else:
+                        includes = ""
+                    if (
+                        "libs" in output["system_deps"]
+                        and len(output["system_deps"]["libs"]) != 0
+                    ):
+                        for lib in output["system_deps"]["libs"]:
+                            libs += f" {lib}"
+                        libs += ")"
+                    else:
+                        libs = ""
+                if not os.path.exists("bin"):
+                    os.mkdir("bin")
+                src = ""
+                compiler = ""
+                if output["language"] == "c":
+                    compiler = "gcc"
+                else:
+                    compiler = "g++"
+                for file in output["src"]:
+                    src += f" {file}"
+                os.system(f"{compiler} -o bin/{outputName}.exe {src} {libs} {includes}")

@@ -4,7 +4,8 @@
 	"outputs": [
 		{
 			"outputName": "run",
-			"outputType": "shared_lib",
+			"outputType": "executable",
+			"language": "cpp",
 			"src": ["test.cpp"],
 			"system_deps": {
 				"include": ["jsoncpp"],
