@@ -4,3 +4,4 @@ lib/
 build/
 *.a
 *.so
+_deps/

@@ -59,12 +59,30 @@
 									"description": "The path to dependency",
 									"type": "string"
 								},
-								"include": {
-									"description": "Include directories",
+								"depName": {
+									"description": "dependency name",
 									"type": "string"
 								},
+								"git": {
+									"type": "boolean",
+									"description": "Is it git repository?"
+								},
+								"repo": {
+									"description": "Github or gitlab repository URL",
+									"type": "string"
+								},
+								"include": {
+									"description": "Include directories",
+									"type": "array",
+									"items": {
+										"type": "string"
+									}
+								},
 								"libs": {
-									"type": "string",
+									"type": "array",
+									"items": {
+										"type": "string"
+									},
 									"description": "Link libraries"
 								}
 							}

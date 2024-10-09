@@ -9,30 +9,6 @@ BuildDepsT = Dict[str, Union[str, List[str], List[str]]]
 OutputT = Dict[str, Union[str, str, SysDepsT, List[BuildDepsT]]]
 CBuildConfig = Dict[str, Union[str, OutputT]]
 
-config: CBuildConfig = json.load(open("c-build.json"))
-
-if "projectName" not in config:
-    print(f"\033[1;31mKeyError: \033[0mMissing projectName in c-build.json")
-    exit(1)
-
-outputs = []
-if "outputs" not in config:
-    print(f"\033[1;31mKeyError: \033[0mMissing outputs in c-build.json")
-    exit(1)
-outputs = config["outputs"]
-
-try:
-    if type(outputs) != list:
-        raise TypeError("outputs must be a list")
-    elif len(outputs) == 0:
-        raise ValueError("outputs must not be empty")
-except TypeError as e:
-    print(f"\033[1;31mTypeError: \033[0m {e}")
-    exit(1)
-except ValueError as e:
-    print(f"\033[1;31mValueError: \033[0m {e}")
-    exit(1)
-
 
 def outputValidate(output: OutputT) -> None:
     try:
@@ -71,33 +47,82 @@ def outputValidate(output: OutputT) -> None:
         exit(1)
 
 
-for output in outputs:
-    outputValidate(output)
-
 if len(sys.argv) == 2:
     if sys.argv[1] == "-B" or sys.argv[1] == "--build":
+        config: CBuildConfig = json.load(open("c-build.json"))
+
+        if "projectName" not in config:
+            print(f"\033[1;31mKeyError: \033[0mMissing projectName in c-build.json")
+            exit(1)
+
+        outputs = []
+        if "outputs" not in config:
+            print(f"\033[1;31mKeyError: \033[0mMissing outputs in c-build.json")
+            exit(1)
+        outputs = config["outputs"]
+
+        try:
+            if type(outputs) != list:
+                raise TypeError("outputs must be a list")
+            elif len(outputs) == 0:
+                raise ValueError("outputs must not be empty")
+        except TypeError as e:
+            print(f"\033[1;31mTypeError: \033[0m {e}")
+            exit(1)
+        except ValueError as e:
+            print(f"\033[1;31mValueError: \033[0m {e}")
+            exit(1)
+        for output in outputs:
+            outputValidate(output)
+
         for output in outputs:
             if output["outputType"] == "static_lib":
                 src = ""
+                compiler = ""
+                if output["language"] == "c":
+                    compiler = "gcc"
+                else:
+                    compiler = "g++"
+                for file in output["src"]:
+                    src += f" {file}"
+                print("\033[1;32mSetting Up Compiler\033[0m")
+                print(f"\033[1;32m\t{compiler} selected as compiler\033[0m\n")
+                print("\033[1;32mCreating object files\033[0m")
+
                 for file in output["src"]:
                     if not os.path.exists("build"):
                         os.mkdir("build")
                     src += f" build/{file.split('.')[0]}.o"
                     os.system(
-                        f"gcc -c {file} -Wall -Werror -o build/{file.split('.')[0]}.o"
+                        f"{compiler} -c {file} -Wall -Werror -o build/{file.split('.')[0]}.o"
                     )
                 outputName = output["outputName"]
                 if not os.path.exists("lib"):
                     os.mkdir("lib")
+                print(f"\033[1;32mCreating static library lib{outputName}.so\033[0m")
                 os.system(f"ar rcs lib/lib{outputName}.a {src}")
+                print()
+
             if output["outputType"] == "shared_lib":
                 src = ""
+                compiler = ""
+                if output["language"] == "c":
+                    compiler = "gcc"
+                else:
+                    compiler = "g++"
+                print("\033[1;32mSetting Up Compiler\033[0m")
+                print(f"\033[1;32m\t{compiler} selected as compiler\033[0m\n")
+                print("\033[1;32mCreating object files\033[0m")
+
                 for file in output["src"]:
                     if not os.path.exists("build"):
                         os.mkdir("build")
                     src += f" build/{file.split('.')[0]}.o"
+                    print(
+                        f"\033[1;32m\tCompiling {file} to {file.split('.')[0]}.o\033[0m"
+                    )
                     os.system(
-                        f"gcc -c {file} -Wall -Werror -fpic -o build/{file.split('.')[0]}.o"
+                        f"{compiler} -c {file} -Wall -Werror -fpic -o build/{file.split('.')[0]}.o"
                     )
                 outputName = output["outputName"]
                 if not os.path.exists("lib"):
@@ -107,16 +132,34 @@ if len(sys.argv) == 2:
                     os.system(f"touch lib/lib{outputName}.so")
                 else:
                     os.system(f"touch lib/lib{outputName}.so")
-                os.system(f"gcc -shared -o lib/lib{outputName}.so {src}")
-            if output["outputType"] == "executable":
+                print(f"\033[1;32mCreating shared library lib{outputName}.so\033[0m")
+                os.system(f"{compiler} -shared -o lib/lib{outputName}.so {src}")
+                print()
+
+            elif output["outputType"] == "executable":
                 src = ""
+                compiler = ""
+                if output["language"] == "c":
+                    compiler = "gcc"
+                else:
+                    compiler = "g++"
+                for file in output["src"]:
+                    src += f" {file}"
+                print("\033[1;32mSetting Up Compiler\033[0m")
+                print(f"\033[1;32m\t{compiler} selected as compiler\033[0m\n")
+                print("\033[1;32mCreating object files\033[0m")
+
                 for file in output["src"]:
                     if not os.path.exists("build"):
                         os.mkdir("build")
-                    src += f" build/{file.split('.')[0]}.o"
-                    os.system(
-                        f"gcc -c {file} -Wall -Werror -fpic -o build/{file.split('.')[0]}.o"
+                    print(
+                        f"\033[1;32m\tCompiling {file} to {file.split('.')[0]}.o\033[0m"
                     )
+                    os.system(
+                        f"{compiler} -c {file} -Wall -Werror -fpic -o build/{file.split('.')[0]}.o"
+                    )
+                print()
+
                 outputName = output["outputName"]
                 libs = "$(pkg-config --libs"
                 includes = "$(pkg-config --cflags"
@@ -130,23 +173,61 @@ if len(sys.argv) == 2:
                         includes += ")"
                     else:
                         includes = ""
+                    useLibs = False
+                    buildLibs = [
+                        (
+                            out["outputName"]
+                            if out["outputType"] == "shared_lib"
+                            or out["outputType"] == "static_lib"
+                            else ""
+                        )
+                        for out in outputs
+                    ]
                     if (
                         "libs" in output["system_deps"]
                         and len(output["system_deps"]["libs"]) != 0
                     ):
                         for lib in output["system_deps"]["libs"]:
-                            libs += f" {lib}"
+                            if lib not in buildLibs:
+                                libs += f" {lib}"
                         libs += ")"
+                        if libs == "$(pkg-config --libs)":
+                            libs = ""
+                        for lib in output["system_deps"]["libs"]:
+                            if lib in buildLibs:
+                                useLibs = True
+                                libs += " -L" + os.getcwd() + "/lib"
+                                libs += f" -l{lib}"
                     else:
                         libs = ""
                 if not os.path.exists("bin"):
                     os.mkdir("bin")
-                src = ""
-                compiler = ""
-                if output["language"] == "c":
-                    compiler = "gcc"
-                else:
-                    compiler = "g++"
-                for file in output["src"]:
-                    src += f" {file}"
-                os.system(f"{compiler} -o bin/{outputName}.exe {src} {libs} {includes}")
+                if not os.path.exists("_deps"):
+                    os.mkdir("_deps")
+                if "build_deps" in output:
+                    for dep in output["build_deps"]:
+                        depName: str = ""
+                        if "git" in dep and "repo" in dep and type(dep["repo"]) == str:
+                            depName = dep["repo"]
+                            if depName.endswith("/"):
+                                depName = depName[:-1]
+                            elif depName.endswith(".git"):
+                                depName = depName[:-4]
+                            depName = depName.split("/")[-1]
+                            if not dep["repo"].startswith("https://"):
+                                dep["name"] = "https://" + dep["name"]
+                            os.system(f"git clone {dep['repo']} _deps/{depName}")
+                        elif "path" in dep and "depName" not in dep:
+                            print(
+                                "\033[1;31mKeyError: \033[0mdepName is required with path"
+                            )
+                            exit(1)
+                        elif "path" in dep and type(dep["depName"]) != str:
+                            print("\033[1;31mKeyError: \033[0mdepName must be a string")
+                        else:
+                            os.system(f"curl {dep['path']} > _deps/{dep['depName']}")
+
+                print(f"\033[1;32mCreating executable {outputName}.exe\033[0m")
+                os.system(
+                    f"{'LD_LIBRARY_PATH=lib ' if useLibs else ''}{compiler} -o bin/{outputName}.exe {src} {libs} {includes}"
+                )
