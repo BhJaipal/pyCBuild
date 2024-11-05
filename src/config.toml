@@ -1,0 +1,10 @@
+name = "Gtk App"
+
+[main]
+language = "c"
+srcs = ["gtk-hello.c"]
+type = "executable"
+
+[[main.deps]]
+name = "gtk"
+use = "pkg-config"

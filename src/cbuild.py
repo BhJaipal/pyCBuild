@@ -1,50 +1,123 @@
-#!/bin/python3
-import json
 import os
 import sys
-from typing import List, Union, Dict
+import numpy
+import toml
 
-SysDepsT = Dict[str, List[str]]
-BuildDepsT = Dict[str, Union[str, List[str], List[str]]]
-OutputT = Dict[str, Union[str, str, SysDepsT, List[BuildDepsT]]]
-CBuildConfig = Dict[str, Union[str, OutputT]]
+class OutputDependencies:
+    depName: str
+    use: str
+    uri: str
 
 
-def outputValidate(output: OutputT) -> None:
+class OutputType:
+    language: str
+    out_type: str
+    name: str
+    srcs: list[str]
+    deps: list[OutputDependencies]
+
+    def __getitem__(self, key: str):
+        if key == "language":
+            return self.language
+        elif key == "type":
+            return self.out_type
+        elif key == "srcs":
+            return self.srcs
+        else:
+            return self.deps
+    def __contains__(self, key: str):
+        if key == "language":
+            return self.language
+        elif key == "type":
+            return self.out_type
+        elif key == "srcs":
+            return self.srcs
+        elif key == "deps":
+            return self.deps
+    
+
+
+class ConfigFile:
+    """
+    # Example config file
+
+    ```toml
+    name = "Example project"
+    [main]
+    language = "c"
+    src = "main.c"
+    type = "executable"
+    ```
+    """
+
+    projectName: str
+    buildDir: str
+    ExecDir: str
+    LibDir: str
+    buildOutputs: list[OutputType]
+
+    def __getitem__(self, name: str):
+        if name == "name":
+            return self.projectName
+        elif name == "builddir":
+            return self.buildDir
+        elif name == "bin-dir":
+            return self.ExecDir
+        elif name == "lib-dir":
+            return self.LibDir
+        else:
+            return self.buildOutputs
+    def __contains__(self, name: str):
+        if name == "name":
+            return self.projectName
+        elif name == "builddir":
+            return self.buildDir
+        elif name == "bin-dir":
+            return self.ExecDir
+        elif name == "lib-dir":
+            return self.LibDir
+        else:
+            return self.buildOutputs
+
+def outputValidate(output: OutputType):
     try:
         if type(output) != dict:
-            raise TypeError("output must be a dict")
-        if "outputName" not in output:
-            raise KeyError("outputName must be in output")
-        if "outputType" not in output:
-            raise KeyError("outputType must be in output")
+            raise TypeError("output must be a object")
+        if "name" not in output:
+            raise KeyError("name must be in output")
+        if "type" not in output:
+            raise KeyError("type must be in output")
         if "language" not in output:
             raise KeyError("language must be in required in file output")
         if (["c", "cpp"]).index(output["language"]) == -1:
             raise KeyError("language must be c (C) or cpp (C++)")
-        if type(output["outputName"]) != str:
-            raise TypeError("outputName must be a string")
-        if type(output["outputType"]) != str:
+        if type(output["name"]) != str:
             raise TypeError("outputType must be a string")
-        if "system_deps" in output:
-            if type(output["system_deps"]) != dict:
-                raise TypeError("system_deps must be a dict")
-            if (
-                "include" in output["system_deps"]
-                and type(output["system_deps"]["include"]) != list
-            ):
-                raise TypeError("include must be a list")
-            if (
-                "libs" in output["system_deps"]
-                and type(output["system_deps"]["libs"]) != list
-            ):
-                raise TypeError("libs must be a list")
+        if "deps" in output:
+            if type(output["deps"]) != list:
+                raise TypeError("deps must be a list")
     except TypeError as e:
         print(f"\033[1;31mTypeError: \033[0m {e}")
         exit(1)
     except KeyError as e:
         print(f"\033[1;31mKeyError: \033[0m {e}")
         exit(1)
+
+def jsonToConfig(data):
+    config = ConfigFile()
+    if "name" not in data:
+        raise ValueError("Configuration must contain a name")
+    else:
+        config.projectName = data["name"]
+    if "builddir" in data:
+        config.buildDir = data["builddir"] or "build/"
+    if "lib-dir" in data:
+        config.LibDir = data["lib-dir"] or "lib/"
+    if "bin-dir" in data:
+        config.ExecDir = data["bin-dir"] or "bin/"
+    for key in numpy.array(["name", "builddir", "lib-dir", "bin-dir"], dtype= str):
+        pass
+
 
 
 if len(sys.argv) == 2:
@@ -58,29 +131,28 @@ if len(sys.argv) == 2:
         print("  -I --init: Create a new project config file")
         exit(0)
     elif sys.argv[1] == "-I" or sys.argv[1] == "--init":
-        json.dump(
+        toml.dump(
             {
                 "projectName": "CBuild",
-                "$schema": os.getcwd() + "/src/CBuild.schema.json",
             },
-            open("c-build.json", "w"),
+            open("config.toml", "w"),
         )
         with open(".gitignore", "w") as f:
             f.write("bin/\nlib/\n*.exe\nbuild/\n*.a\n*.so\n_deps/")
         exit(0)
     elif sys.argv[1] == "-B" or sys.argv[1] == "--build":
-        config: CBuildConfig = json.load(open("c-build.json"))
+        config: ConfigFile = toml.load(open("config.toml"))
 
         if "projectName" not in config:
-            print(f"\033[1;31mKeyError: \033[0mMissing projectName in c-build.json")
+            print(f"\033[1;31mKeyError: \033[0mMissing projectName in config.toml")
             exit(1)
         print(f"\033[1;32mBuilding Project {config['projectName']}\033[0m")
 
         outputs = []
         if "outputs" not in config:
-            print(f"\033[1;31mKeyError: \033[0mMissing outputs in c-build.json")
+            print(f"\033[1;31mKeyError: \033[0mMissing outputs in config.toml")
             exit(1)
-        outputs = config["outputs"]
+        outputs = config.outputs
 
         try:
             if type(outputs) != list:
@@ -98,7 +170,7 @@ if len(sys.argv) == 2:
         print()
 
         for output in outputs:
-            print(f"\033[1;32mBuilding {output['outputName']}\033[0m")
+            print(f"\033[1;32mBuilding {output.name}\033[0m")
             print(
                 f"\033[1;34mSetting Up compiler options for {output['outputName']}\033[0m"
             )
@@ -252,28 +324,6 @@ if len(sys.argv) == 2:
                     os.mkdir("bin")
                 if not os.path.exists("_deps"):
                     os.mkdir("_deps")
-                if "build_deps" in output:
-                    for dep in output["build_deps"]:
-                        depName: str = ""
-                        if "git" in dep and "repo" in dep and type(dep["repo"]) == str:
-                            depName = dep["repo"]
-                            if depName.endswith("/"):
-                                depName = depName[:-1]
-                            elif depName.endswith(".git"):
-                                depName = depName[:-4]
-                            depName = depName.split("/")[-1]
-                            if not dep["repo"].startswith("https://"):
-                                dep["name"] = "https://" + dep["name"]
-                            os.system(f"git clone {dep['repo']} _deps/{depName}")
-                        elif "path" in dep and "depName" not in dep:
-                            print(
-                                "\033[1;31mKeyError: \033[0mdepName is required with path"
-                            )
-                            exit(1)
-                        elif "path" in dep and type(dep["depName"]) != str:
-                            print("\033[1;31mKeyError: \033[0mdepName must be a string")
-                        else:
-                            os.system(f"curl {dep['path']} > _deps/{dep['depName']}")
 
                 print(
                     f"\033[0;33mⵙ Creating executable {outputName}.exe\033[0m", end=""
@@ -285,3 +335,9 @@ if len(sys.argv) == 2:
                     f"\r\033[1;32m Successfully created executable {outputName}.exe\033[0m\n"
                 )
         print(f"\033[1;32m{config['projectName']} built successfully\033[0m")
+
+def main():
+    print(toml.load(open("./config.toml", "r").read()))
+    return 0
+if __name__ == "__main__":
+    main()
