@@ -8,3 +8,8 @@ type = "executable"
 [[main.deps]]
 name = "gtk4"
 use = "pkg-config"
+
+[py-math]
+language = "c"
+src = ["py-math.c"]
+type = "static_lib"

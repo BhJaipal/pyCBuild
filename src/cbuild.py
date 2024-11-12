@@ -51,7 +51,11 @@ class ConfigFile:
     [main]
     language = "c"
     src = "main.c"
-    type = "executable"
+    type = "executable" # | "static_lib" | "shared_lib"
+    [[main.deps]]
+    name = "gtk-3.0"
+    use = "pkg-config" # | "git"
+    uri = "..." # only used with git
     ```
     """
 
@@ -155,7 +159,7 @@ if len(sys.argv) == 2:
     elif sys.argv[1] == "-I" or sys.argv[1] == "--init":
         toml.dump(
             {
-                "projectName": "CBuild",
+                "name": "CBuild",
             },
             open("config.toml", "w"),
         )
@@ -196,45 +200,68 @@ if len(sys.argv) == 2:
                 f"\033[1;34mSetting Up compiler options for {output.name}\033[0m"
             )
             if output.out_type == "static_lib":
-                src = ""
+                src = " ".join(output.srcs)
+                objectFiles = " ".join([f"{config.buildDir}/{s.split('.')[0]}.o" for s in output.srcs])
                 compiler = ""
                 if output.language == "c":
                     compiler = "gcc"
                 else:
                     compiler = "g++"
-                for file in output.srcs:
-                    src += f" {file}"
                 print(f"\033[1;34m\t{compiler} selected as compiler\033[0m")
                 print("\033[1;32mCreating object files\033[0m")
+
+                outputName = output.name
+                libs = "$(pkg-config --libs"
+                includes = "$(pkg-config --cflags"
+                sysLibs = False
+                gitDeps = False
+                for dep in output.deps:
+                    if dep.use == "pkg-config":
+                        libs += " " + dep.depName
+                        includes += " " + dep.depName
+                        sysLibs = True
+                    if dep.use == "git":
+                        gitDeps = True
+                libs += ")"
+                includes += ")"
+                if not sysLibs:
+                    libs = ""
+                    includes = ""
 
                 for file in output.srcs:
                     if not os.path.exists("build"):
                         os.mkdir("build")
-                    src += f" build/{file.split('.')[0]}.o"
                     print(
-                        f"\033[0;33m\tⵙ Compiling {file} to {file.split('.')[0]}.o\033[0m",
+                        f"\033[0;33m\tⵙ Compiling {file} to {file.split('.c')[0]}.o\033[0m",
                         end="",
                     )
-                    os.system(
-                        f"{compiler} -c {file} -Wall -Werror -o build/{file.split('.')[0]}.o"
+                    res = os.system(
+                        f"{compiler} -c {file} {includes} {libs} -Wall -Werror -fpic -o build/{file.split('.')[0]}.o"
                     )
+                    if bool(res):
+                        exit(res)
                     print(
-                        f"\r\033[0;32m\t Compiled {file} to {file.split('.')[0]}.o\033[0m"
+                        f"\r\033[0;32m\t Compiled {file} to {file.split('.')[0]}.o \033[0m",
                     )
-                outputName = output.name
-                if not os.path.exists("lib"):
-                    os.mkdir("lib")
+
+                if not os.path.exists(config.ExecDir):
+                    os.mkdir(config.ExecDir)
+                if gitDeps and not os.path.exists("_deps"):
+                    os.mkdir("_deps")
                 print(
                     f"\033[0;33mⵙ Creating static library lib{outputName}.a\033[0m",
                     end="",
                 )
-                os.system(f"ar rcs lib/lib{outputName}.a {src}")
+                filesPresent = os.listdir(os.getcwd() + "/"+ config.LibDir)
+                if "lib"+outputName+ ".a" in filesPresent:
+                    os.remove(f"{os.getcwd()}/{config.LibDir}/lib{outputName}.a")
+                os.system(f"ar rcs {config.LibDir}/lib{outputName}.a {objectFiles}")
                 print(
-                    f"\r\033[1;32m Successfully created shared library lib{outputName}.so\033[0m\n"
+                    f"\r\033[1;32m Successfully created static library lib{outputName}.a\033[0m\n"
                 )
 
             elif output.out_type == "shared_lib":
-                src = ""
+                src = " ".join(output.srcs)
                 compiler = ""
                 if output.language == "c":
                     compiler = "gcc"
@@ -243,33 +270,49 @@ if len(sys.argv) == 2:
                 print(f"\033[1;34m\t{compiler} selected as compiler\033[0m")
                 print("\033[1;32mCreating object files\033[0m")
 
-                for file in output["src"]:
-                    if not os.path.exists("build"):
-                        os.mkdir("build")
-                    src += f" build/{file.split('.')[0]}.o"
+                outputName = output.name
+                libs = "$(pkg-config --libs"
+                includes = "$(pkg-config --cflags"
+                sysLibs = False
+                gitDeps = False
+                for dep in output.deps:
+                    if dep.use == "pkg-config":
+                        libs += " " + dep.depName
+                        includes += " " + dep.depName
+                        sysLibs = True
+                    if dep.use == "git":
+                        gitDeps = True
+                libs += ")"
+                includes += ")"
+                if not sysLibs:
+                    libs = ""
+                    includes = ""
+
+                for file in output.srcs:
+                    if not os.path.exists(config.buildDir):
+                        os.mkdir(config.buildDir)
                     print(
                         f"\033[0;33m\tⵙ Compiling {file} to {file.split('.')[0]}.o\033[0m",
                         end="",
                     )
-                    os.system(
-                        f"{compiler} -c {file} -Wall -Werror -fpic -o build/{file.split('.')[0]}.o"
+                    res = os.system(
+                        f"{compiler} -c {file} {includes} {libs} -Wall -Werror -fpic -o {config.buildDir}/{file.split('.')[0]}.o"
                     )
+                    if bool(res):
+                        exit(res)
                     print(
-                        f"\r\033[0;32m\t Compiled {file} to {file.split('.')[0]}.o \033[0m"
+                        f"\r\033[0;32m\t Compiled {file} to {file.split('.')[0]}.o \033[0m",
                     )
-                outputName = output.name
-                if not os.path.exists("lib"):
-                    os.mkdir("lib")
-                if os.path.exists(f"lib/lib{outputName}.so"):
-                    os.system(f"rm lib/lib{outputName}.so")
-                    os.system(f"touch lib/lib{outputName}.so")
-                else:
-                    os.system(f"touch lib/lib{outputName}.so")
+
+                if not os.path.exists(config.ExecDir):
+                    os.mkdir(config.ExecDir)
+                if gitDeps and not os.path.exists("_deps"):
+                    os.mkdir("_deps")
                 print(
                     f"\033[0;33mⵙ Creating shared library lib{outputName}.so\033[0m",
                     end="",
                 )
-                os.system(f"{compiler} -shared -o lib/lib{outputName}.so {src}")
+                os.system(f"{compiler} -shared -o {config.LibDir}/lib{outputName}.so {src}")
                 print(
                     f"\r\033[1;32m Successfully created shared library lib{outputName}.so\033[0m\n"
                 )
@@ -303,14 +346,14 @@ if len(sys.argv) == 2:
                     includes = ""
 
                 for file in output.srcs:
-                    if not os.path.exists("build"):
-                        os.mkdir("build")
+                    if not os.path.exists(config.buildDir):
+                        os.mkdir(config.buildDir)
                     print(
                         f"\033[0;33m\tⵙ Compiling {file} to {file.split('.')[0]}.o\033[0m",
                         end="",
                     )
                     res = os.system(
-                        f"{compiler} -c {file} {includes} {libs} -Wall -Werror -fpic -o build/{file.split('.')[0]}.o"
+                        f"{compiler} -c {file} {includes} {libs} -Wall -Werror -fpic -o {config.buildDir}/{file.split('.')[0]}.o"
                     )
                     if bool(res):
                         exit(res)
@@ -318,8 +361,8 @@ if len(sys.argv) == 2:
                         f"\r\033[0;32m\t Compiled {file} to {file.split('.')[0]}.o \033[0m",
                     )
 
-                if not os.path.exists("bin"):
-                    os.mkdir("bin")
+                if not os.path.exists(config.ExecDir):
+                    os.mkdir(config.ExecDir)
                 if gitDeps and not os.path.exists("_deps"):
                     os.mkdir("_deps")
 
@@ -327,7 +370,7 @@ if len(sys.argv) == 2:
                     f"\033[0;33mⵙ Creating executable {outputName}.exe\033[0m", end=""
                 )
                 os.system(
-                    f"{compiler} -o bin/{outputName}.exe " + " ".join([f"build/{file.split('.')[0]}.o" for file in output.srcs]) + f" {libs} {includes}"
+                    f"{compiler} -o {config.ExecDir}/{outputName}.exe " + " ".join([f"{config.buildDir}/{file.split('.')[0]}.o" for file in output.srcs]) + f" {libs} {includes}"
                 )
                 print(
                     f"\r\033[1;32m Successfully created executable {outputName}.exe\033[0m\n"
