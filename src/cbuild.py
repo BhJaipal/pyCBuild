@@ -2,11 +2,14 @@ import os
 import sys
 import numpy
 import toml
+from typing import Any, Union
 
 class OutputDependencies:
     depName: str
     use: str
-    uri: str
+    uri: Union[str, None] = None
+    def __str__(self):
+        return f"depName: {self.depName}, use: {self.use}"+ f", uri: {self.uri}" if self.uri != None else ""
 
 
 class OutputType:
@@ -28,13 +31,15 @@ class OutputType:
     def __contains__(self, key: str):
         if key == "language":
             return self.language
+        elif key == "name":
+            return self.name
         elif key == "type":
             return self.out_type
         elif key == "srcs":
             return self.srcs
         elif key == "deps":
             return self.deps
-    
+
 
 
 class ConfigFile:
@@ -54,7 +59,7 @@ class ConfigFile:
     buildDir: str
     ExecDir: str
     LibDir: str
-    buildOutputs: list[OutputType]
+    buildOutputs: list[OutputType] = []
 
     def __getitem__(self, name: str):
         if name == "name":
@@ -81,8 +86,6 @@ class ConfigFile:
 
 def outputValidate(output: OutputType):
     try:
-        if type(output) != dict:
-            raise TypeError("output must be a object")
         if "name" not in output:
             raise KeyError("name must be in output")
         if "type" not in output:
@@ -91,7 +94,7 @@ def outputValidate(output: OutputType):
             raise KeyError("language must be in required in file output")
         if (["c", "cpp"]).index(output["language"]) == -1:
             raise KeyError("language must be c (C) or cpp (C++)")
-        if type(output["name"]) != str:
+        if type(output.name) != str:
             raise TypeError("outputType must be a string")
         if "deps" in output:
             if type(output["deps"]) != list:
@@ -103,7 +106,7 @@ def outputValidate(output: OutputType):
         print(f"\033[1;31mKeyError: \033[0m {e}")
         exit(1)
 
-def jsonToConfig(data):
+def jsonToConfig(data: dict[str, Any]):
     config = ConfigFile()
     if "name" not in data:
         raise ValueError("Configuration must contain a name")
@@ -115,8 +118,27 @@ def jsonToConfig(data):
         config.LibDir = data["lib-dir"] or "lib/"
     if "bin-dir" in data:
         config.ExecDir = data["bin-dir"] or "bin/"
-    for key in numpy.array(["name", "builddir", "lib-dir", "bin-dir"], dtype= str):
-        pass
+    config_keys = numpy.array(["name", "builddir", "lib-dir", "bin-dir"], dtype= str)
+    for key in data:
+        if key in config_keys:
+            continue
+        out = OutputType()
+        out.name = key
+        out.language = data[key]["language"]
+        out.deps = []
+        out.out_type = data[key]["type"]
+        out.srcs = data[key]["src"]
+        out.deps = []
+        if "deps" in data[key]:
+            for dep in data[key]["deps"]:
+                depObj = OutputDependencies()
+                depObj.depName = dep["name"]
+                depObj.use = dep["use"]
+                if "uri" in dep:
+                    depObj.uri = dep["uri"]
+                out.deps.append(depObj)
+        config.buildOutputs.append(out)
+    return config
 
 
 
@@ -141,18 +163,18 @@ if len(sys.argv) == 2:
             f.write("bin/\nlib/\n*.exe\nbuild/\n*.a\n*.so\n_deps/")
         exit(0)
     elif sys.argv[1] == "-B" or sys.argv[1] == "--build":
-        config: ConfigFile = toml.load(open("config.toml"))
+        config: ConfigFile = jsonToConfig(toml.load("config.toml"))
 
         if "projectName" not in config:
             print(f"\033[1;31mKeyError: \033[0mMissing projectName in config.toml")
             exit(1)
-        print(f"\033[1;32mBuilding Project {config['projectName']}\033[0m")
+        print(f"\033[1;32mBuilding Project {config.projectName}\033[0m")
 
         outputs = []
         if "outputs" not in config:
             print(f"\033[1;31mKeyError: \033[0mMissing outputs in config.toml")
             exit(1)
-        outputs = config.outputs
+        outputs = config.buildOutputs
 
         try:
             if type(outputs) != list:
@@ -167,26 +189,25 @@ if len(sys.argv) == 2:
             exit(1)
         for output in outputs:
             outputValidate(output)
-        print()
 
         for output in outputs:
             print(f"\033[1;32mBuilding {output.name}\033[0m")
             print(
-                f"\033[1;34mSetting Up compiler options for {output['outputName']}\033[0m"
+                f"\033[1;34mSetting Up compiler options for {output.name}\033[0m"
             )
-            if output["outputType"] == "static_lib":
+            if output.out_type == "static_lib":
                 src = ""
                 compiler = ""
-                if output["language"] == "c":
+                if output.language == "c":
                     compiler = "gcc"
                 else:
                     compiler = "g++"
-                for file in output["src"]:
+                for file in output.srcs:
                     src += f" {file}"
                 print(f"\033[1;34m\t{compiler} selected as compiler\033[0m")
                 print("\033[1;32mCreating object files\033[0m")
 
-                for file in output["src"]:
+                for file in output.srcs:
                     if not os.path.exists("build"):
                         os.mkdir("build")
                     src += f" build/{file.split('.')[0]}.o"
@@ -200,7 +221,7 @@ if len(sys.argv) == 2:
                     print(
                         f"\r\033[0;32m\t Compiled {file} to {file.split('.')[0]}.o\033[0m"
                     )
-                outputName = output["outputName"]
+                outputName = output.name
                 if not os.path.exists("lib"):
                     os.mkdir("lib")
                 print(
@@ -212,10 +233,10 @@ if len(sys.argv) == 2:
                     f"\r\033[1;32m Successfully created shared library lib{outputName}.so\033[0m\n"
                 )
 
-            elif output["outputType"] == "shared_lib":
+            elif output.out_type == "shared_lib":
                 src = ""
                 compiler = ""
-                if output["language"] == "c":
+                if output.language == "c":
                     compiler = "gcc"
                 else:
                     compiler = "g++"
@@ -236,7 +257,7 @@ if len(sys.argv) == 2:
                     print(
                         f"\r\033[0;32m\t Compiled {file} to {file.split('.')[0]}.o \033[0m"
                     )
-                outputName = output["outputName"]
+                outputName = output.name
                 if not os.path.exists("lib"):
                     os.mkdir("lib")
                 if os.path.exists(f"lib/lib{outputName}.so"):
@@ -253,91 +274,65 @@ if len(sys.argv) == 2:
                     f"\r\033[1;32m Successfully created shared library lib{outputName}.so\033[0m\n"
                 )
 
-            elif output["outputType"] == "executable":
-                src = ""
+            elif output.out_type == "executable":
+                src = " ".join(output.srcs)
                 compiler = ""
-                if output["language"] == "c":
+                if output.language == "c":
                     compiler = "gcc"
                 else:
                     compiler = "g++"
-                for file in output["src"]:
-                    src += f" {file}"
                 print(f"\033[1;34m\t{compiler} selected as compiler\033[0m")
                 print("\033[1;32mCreating object files\033[0m")
 
-                for file in output["src"]:
+                outputName = output.name
+                libs = "$(pkg-config --libs"
+                includes = "$(pkg-config --cflags"
+                sysLibs = False
+                gitDeps = False
+                for dep in output.deps:
+                    if dep.use == "pkg-config":
+                        libs += " " + dep.depName
+                        includes += " " + dep.depName
+                        sysLibs = True
+                    if dep.use == "git":
+                        gitDeps = True
+                libs += ")"
+                includes += ")"
+                if not sysLibs:
+                    libs = ""
+                    includes = ""
+
+                for file in output.srcs:
                     if not os.path.exists("build"):
                         os.mkdir("build")
                     print(
                         f"\033[0;33m\tⵙ Compiling {file} to {file.split('.')[0]}.o\033[0m",
                         end="",
                     )
-                    os.system(
-                        f"{compiler} -c {file} -Wall -Werror -fpic -o build/{file.split('.')[0]}.o"
+                    res = os.system(
+                        f"{compiler} -c {file} {includes} {libs} -Wall -Werror -fpic -o build/{file.split('.')[0]}.o"
                     )
+                    if bool(res):
+                        exit(res)
                     print(
                         f"\r\033[0;32m\t Compiled {file} to {file.split('.')[0]}.o \033[0m",
                     )
 
-                outputName = output["outputName"]
-                libs = "$(pkg-config --libs"
-                includes = "$(pkg-config --cflags"
-                if "system_deps" in output:
-                    if (
-                        "include" in output["system_deps"]
-                        and len(output["system_deps"]["include"]) != 0
-                    ):
-                        for inc in output["system_deps"]["include"]:
-                            includes += f" {inc}"
-                        includes += ")"
-                    else:
-                        includes = ""
-                    useLibs = False
-                    buildLibs = [
-                        (out["outputName"] if out["outputType"] == "shared_lib" else "")
-                        for out in outputs
-                    ]
-                    staticLibs = [
-                        (out["outputName"] if out["outputType"] == "static_lib" else "")
-                        for out in outputs
-                    ]
-                    if (
-                        "libs" in output["system_deps"]
-                        and len(output["system_deps"]["libs"]) != 0
-                    ):
-                        for lib in output["system_deps"]["libs"]:
-                            if lib not in buildLibs and lib not in staticLibs:
-                                libs += f" {lib}"
-                        libs += ")"
-                        if libs == "$(pkg-config --libs)":
-                            libs = ""
-                        for lib in output["system_deps"]["libs"]:
-                            if lib in buildLibs:
-                                useLibs = True
-                                libs += " -L" + os.getcwd() + "/lib"
-                                libs += f" lib/lib{lib}.so"
-                            if lib in staticLibs:
-                                libs += f" lib/lib{lib}.a"
-                    else:
-                        libs = ""
                 if not os.path.exists("bin"):
                     os.mkdir("bin")
-                if not os.path.exists("_deps"):
+                if gitDeps and not os.path.exists("_deps"):
                     os.mkdir("_deps")
 
                 print(
                     f"\033[0;33mⵙ Creating executable {outputName}.exe\033[0m", end=""
                 )
                 os.system(
-                    f"{'LD_LIBRARY_PATH=' + os.getcwd() + '/lib ' if useLibs else ''}{compiler} -o bin/{outputName}.exe {src} {libs} {includes}"
+                    f"{compiler} -o bin/{outputName}.exe " + " ".join([f"build/{file.split('.')[0]}.o" for file in output.srcs]) + f" {libs} {includes}"
                 )
                 print(
                     f"\r\033[1;32m Successfully created executable {outputName}.exe\033[0m\n"
                 )
-        print(f"\033[1;32m{config['projectName']} built successfully\033[0m")
+        print(f"\033[1;32m{config.projectName} built successfully\033[0m")
 
-def main():
-    print(toml.load(open("./config.toml", "r").read()))
-    return 0
 if __name__ == "__main__":
-    main()
+    pass
