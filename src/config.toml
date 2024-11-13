@@ -9,6 +9,11 @@ type = "executable"
 name = "gtk4"
 use = "pkg-config"
 
+[[main.deps]]
+name = "pgvector"
+uri = "https://github.com/pgvector/pgvector.git"
+use = "git"
+
 [py-math]
 language = "c"
 src = ["py-math.c"]
