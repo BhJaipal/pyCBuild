@@ -1,4 +1,4 @@
 #!/bin/sh
-cd src
-../bin/python3 CBuild.py
+cd examples
+../bin/python3 ../src/cbuild.py -B
 cd ..

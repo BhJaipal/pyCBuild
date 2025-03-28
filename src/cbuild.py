@@ -59,6 +59,3 @@ if len(sys.argv) == 2:
             )
             build(output, config)
         print(f"\033[1;32m{config.projectName} built successfully\033[0m")
-
-if __name__ == "__main__":
-    pass

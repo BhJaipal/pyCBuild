@@ -61,6 +61,8 @@ def build(output: OutputType, config: ConfigFile):
             f"\033[0;33mⵙ Creating static library lib{outputName}.a\033[0m",
             end="",
         )
+        if ("lib" not in os.listdir(os.getcwd())):
+            os.mkdir("lib")
         filesPresent = os.listdir(os.getcwd() + "/"+ config.LibDir)
         if "lib"+ outputName+ ".a" in filesPresent:
             os.remove(f"{os.getcwd()}/{config.LibDir}/lib{outputName}.a")
